@@ -52,9 +52,9 @@ body {
   z-index: 1;
 }
 
-/* Keep the hotbar usable above the inventory screen. */
-body.inventory #hud {
-  z-index: 3;
+/* The inventory screen has its own copy of the hotbar. */
+body.inventory #bottom {
+  display: none;
 }
 
 body.inventory #crosshair,
@@ -106,12 +106,38 @@ body.inventory #badge {
   gap: 6px;
 }
 
-#hearts {
+#bars {
+  display: flex;
+  justify-content: space-between;
+  width: 100%;
+}
+
+#hearts,
+#food,
+#air {
   display: flex;
   gap: 1px;
   padding-left: 2px;
 }
 
+#air {
+  align-self: flex-end;
+  min-height: calc(var(--slot) * 0.36);
+}
+
+#air img,
+#air span {
+  width: calc(var(--slot) * 0.36);
+  height: calc(var(--slot) * 0.36);
+  image-rendering: pixelated;
+}
+
+body.creative #bars,
+body.creative #air {
+  visibility: hidden;
+}
+
+#food img,
 #hearts img {
   width: calc(var(--slot) * 0.4);
   height: calc(var(--slot) * 0.356);
@@ -547,13 +573,13 @@ kbd {
 }
 
 #inventory {
-  justify-content: flex-start;
-  padding-top: max(24px, env(safe-area-inset-top));
-  padding-bottom: calc(var(--slot) + 40px);
+  --slot: min(40px, 9.4vw);
+  justify-content: safe center;
+  padding-top: max(16px, env(safe-area-inset-top));
   background: rgba(12, 14, 20, 0.8);
 }
 
-#inv-grid {
+#inv-grid-unused {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(76px, 1fr));
   gap: 8px;
@@ -637,4 +663,246 @@ kbd {
   .btn {
     font-size: 24px;
   }
+}
+
+/* ------------------------------------------------------------ stacks */
+
+.slot {
+  position: relative;
+}
+
+.slot .count {
+  position: absolute;
+  right: 2px;
+  bottom: 0;
+  font-family: var(--ui-font);
+  font-size: 20px;
+  line-height: 1;
+  color: #fff;
+  text-shadow: 2px 2px 0 #3f3f3f;
+  pointer-events: none;
+}
+
+.slot .dur {
+  position: absolute;
+  left: 12%;
+  right: 12%;
+  bottom: 3px;
+  height: 3px;
+  background: #111;
+  pointer-events: none;
+}
+
+.slot .dur i {
+  display: block;
+  height: 100%;
+}
+
+#cursor-stack {
+  position: fixed;
+  left: 0;
+  top: 0;
+  width: 44px;
+  height: 44px;
+  z-index: 10;
+  pointer-events: none;
+  display: none;
+  border: 0;
+  background: none;
+}
+
+#cursor-stack.shown {
+  display: block;
+}
+
+#cursor-stack img {
+  width: 100%;
+  height: 100%;
+}
+
+#sleep-fade {
+  position: fixed;
+  inset: 0;
+  background: #02030a;
+  opacity: 0;
+  pointer-events: none;
+  z-index: 4;
+}
+
+#sleep-fade.on {
+  animation: sleep 2s ease-in-out;
+}
+
+@keyframes sleep {
+  0% { opacity: 0; }
+  45%, 55% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+/* ------------------------------------------------------------ inventory */
+
+.inv-wrap {
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+  justify-content: center;
+  flex-wrap: wrap;
+  width: min(1040px, 100%);
+}
+
+.inv-panel {
+  background: rgba(30, 32, 40, 0.85);
+  border: 3px solid #0a0a0a;
+  box-shadow: inset 2px 2px 0 #5a5a64, inset -2px -2px 0 #16161a;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: 100%;
+}
+
+.inv-panel h2 {
+  margin: 0;
+  font-size: 16px;
+  text-align: left;
+}
+
+.slot-grid {
+  display: grid;
+  grid-template-columns: repeat(9, var(--slot));
+  gap: 2px;
+}
+
+.slot-grid .slot,
+#hot-grid .slot {
+  width: var(--slot);
+  height: var(--slot);
+  padding: 4px;
+  background: rgba(139, 139, 139, 0.35);
+  border: 2px solid #8b8b8b;
+  border-right-color: #4a4a4a;
+  border-bottom-color: #4a4a4a;
+  cursor: pointer;
+}
+
+.slot-grid .slot img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  pointer-events: none;
+}
+
+.slot-grid .slot:hover {
+  background: rgba(180, 190, 240, 0.45);
+}
+
+#hot-grid {
+  margin-top: 6px;
+}
+
+.slot-grid.creative {
+  max-height: min(40vh, 330px);
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+#craft-panel {
+  width: min(360px, 100%);
+  align-self: stretch;
+}
+
+#recipe-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: min(52vh, 470px);
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.recipe {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-family: var(--ui-font);
+  font-size: 19px;
+  color: #fff;
+  text-align: left;
+  background: rgba(90, 140, 70, 0.35);
+  border: 2px solid #3a5a2e;
+  padding: 3px 6px;
+  cursor: pointer;
+}
+
+.recipe:hover {
+  background: rgba(110, 180, 80, 0.55);
+}
+
+.recipe.locked {
+  background: rgba(60, 60, 64, 0.5);
+  border-color: #2a2a2e;
+  color: #9a9a9a;
+  cursor: default;
+}
+
+.recipe img {
+  width: 26px;
+  height: 26px;
+  vertical-align: middle;
+}
+
+.recipe .out {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.recipe .out b {
+  font-weight: normal;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.recipe .needs {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.recipe .need {
+  display: flex;
+  align-items: center;
+  font-size: 17px;
+}
+
+.recipe .need img {
+  width: 22px;
+  height: 22px;
+}
+
+.recipe .need.missing {
+  color: #ff7a6a;
+}
+
+.recipe .station {
+  font-size: 15px;
+  padding: 0 4px;
+  border: 1px solid currentColor;
+  opacity: 0.8;
+}
+
+@media (max-width: 540px) {
+  .slot-grid {
+    grid-template-columns: repeat(9, calc(var(--slot) * 0.92));
+  }
+}
+
+.inv-panel .hint {
+  max-width: calc(var(--slot) * 9 + 18px);
+  font-size: 18px;
+  margin: 0;
 }

@@ -1,10 +1,28 @@
 // Chunked block storage, player edits and per-chunk lighting metadata.
 
 import { CHUNK, HEIGHT, CHUNK_VOLUME, MAX_LIGHT_RADIUS, blockIndex, chunkKey } from '../config.js';
-import { B, LIGHT, SKY_BLOCKING, SOLID } from '../blocks.js';
+import { B, LIGHT, SKY_BLOCKING, SOLID, GROWS } from '../blocks.js';
 import { WorldGen } from './worldgen.js';
 
 export class Chunk {
+  /** Builds a chunk from data already computed elsewhere (a worker). */
+  static fromData(d) {
+    const c = Object.create(Chunk.prototype);
+    c.cx = d.cx;
+    c.cz = d.cz;
+    c.key = chunkKey(d.cx, d.cz);
+    c.blocks = d.blocks;
+    c.skyHeight = d.skyHeight;
+    c.maxY = d.maxY;
+    c.emitters = d.emitters;
+    c.growables = d.growables;
+    c.springs = d.springs;
+    c.dirty = true;
+    c.meshed = false;
+    c.version = 0;
+    return c;
+  }
+
   constructor(cx, cz, blocks) {
     this.cx = cx;
     this.cz = cz;
@@ -17,6 +35,7 @@ export class Chunk {
     this.emitters = [];
     this.dirty = true;
     this.meshed = false;
+    this.version = 0;
     this.recomputeMeta();
   }
 
@@ -52,16 +71,20 @@ export class Chunk {
   rebuildEmitters() {
     const b = this.blocks;
     const out = [];
+    const grow = [];
     const top = Math.min(HEIGHT - 1, this.maxY);
     for (let y = 0; y <= top; y++) {
       for (let z = 0; z < CHUNK; z++) {
         for (let x = 0; x < CHUNK; x++) {
-          const l = LIGHT[b[blockIndex(x, y, z)]];
+          const id = b[blockIndex(x, y, z)];
+          const l = LIGHT[id];
           if (l) out.push(x, y, z, l);
+          if (GROWS.has(id)) grow.push(x, y, z);
         }
       }
     }
     this.emitters = out;
+    this.growables = grow;
   }
 }
 
@@ -91,7 +114,15 @@ export class World {
     const edits = this.edits.get(key);
     if (edits) for (const [i, id] of edits) blocks[i] = id;
     chunk = new Chunk(cx, cz, blocks);
-    this.chunks.set(key, chunk);
+    chunk.springs = this.gen.springs;
+    this.addChunk(chunk);
+    return chunk;
+  }
+
+  /** Registers an already generated chunk (e.g. from a worker). */
+  addChunk(chunk) {
+    this.chunks.set(chunk.key, chunk);
+    if (this.onChunkLoaded) this.onChunkLoaded(chunk);
     return chunk;
   }
 
@@ -153,6 +184,10 @@ export class World {
         this.markDirty((x + dx) >> 4, (z + dz) >> 4);
       }
     }
+    if (GROWS.has(old) || GROWS.has(id)) {
+      if (!(LIGHT[old] || LIGHT[id])) chunk.rebuildEmitters();
+    }
+    if (this.onBlockChanged) this.onBlockChanged(x, y, z, old, id);
     // Light emitters affect a wider area.
     if (LIGHT[old] || LIGHT[id]) {
       chunk.rebuildEmitters();
@@ -169,7 +204,34 @@ export class World {
     const chunk = this.chunks.get(key);
     if (!chunk) return;
     chunk.dirty = true;
+    chunk.version++;
     if (chunk.meshed) this.dirty.add(key);
+  }
+
+  /**
+   * Light at a point for entities: sky (0..1, not scaled by daylight) and block light.
+   */
+  lightAt(x, y, z) {
+    const bx = Math.floor(x);
+    const bz = Math.floor(z);
+    const chunk = this.chunks.get(chunkKey(bx >> 4, bz >> 4));
+    if (!chunk) return { sky: 1, torch: 0 };
+    const h = chunk.skyHeight[(bz & 15) * CHUNK + (bx & 15)];
+    const sky = y >= h ? 1 : Math.max(0, 1 - 0.2 * (h - y));
+    let torch = 0;
+    for (let dz = -1; dz <= 1; dz++) {
+      for (let dx = -1; dx <= 1; dx++) {
+        const c = this.chunks.get(chunkKey((bx >> 4) + dx, (bz >> 4) + dz));
+        if (!c || !c.emitters.length) continue;
+        const e = c.emitters;
+        for (let i = 0; i < e.length; i += 4) {
+          const d = Math.hypot(c.cx * CHUNK + e[i] + 0.5 - x, e[i + 1] + 0.5 - y, c.cz * CHUNK + e[i + 2] + 0.5 - z);
+          const v = 1 - d / e[i + 3];
+          if (v > torch) torch = v;
+        }
+      }
+    }
+    return { sky, torch };
   }
 
   /** Highest solid block in a column (loaded chunks only), or -1. */

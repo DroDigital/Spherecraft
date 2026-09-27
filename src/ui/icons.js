@@ -1,6 +1,8 @@
 // Draws little shaded-sphere icons for the hotbar and inventory.
 
 import { BLOCKS, B, PATTERN } from '../blocks.js';
+import { itemDef, I } from '../items.js';
+import { itemModel } from '../render/itemModels.js';
 import { mulberry32 } from '../world/noise.js';
 
 const cache = new Map();
@@ -117,6 +119,47 @@ export function blockIcon(id, size = 64) {
     ball(ctx, 32 * s, 20 * s, 9 * s, def.color, def.color2, 0, rand);
   } else {
     ball(ctx, 32 * s, 32 * s, 26 * s, def.color, def.color2 ?? def.color, def.pattern, rand);
+  }
+  const url = canvas.toDataURL();
+  cache.set(key, url);
+  return url;
+}
+
+/** Icon for any item: blocks use blockIcon, other items are drawn from their sphere model. */
+export function itemIcon(id, size = 64) {
+  if (id < 128) return blockIcon(id, size);
+  const key = `i${id}:${size}`;
+  if (cache.has(key)) return cache.get(key);
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext('2d');
+  const def = itemDef(id);
+  const parts = itemModel(id);
+  const diagonal = ['tool', 'stick'].includes(def?.shape) || id === I.BOW;
+  const s = size / 64;
+  const k = diagonal ? 46 : 60;
+  ctx.translate(32 * s, 32 * s);
+  if (diagonal) ctx.rotate(Math.PI / 4);
+  for (const p of [...parts].sort((a, b) => a.p[2] - b.p[2])) {
+    const cx = p.p[0] * k * s;
+    const cy = -p.p[1] * k * s;
+    const rx = Math.max(1.5, p.s[0] * k * s);
+    const ry = Math.max(1.5, p.s[1] * k * s);
+    const g = ctx.createRadialGradient(cx - rx * 0.35, cy - ry * 0.4, Math.min(rx, ry) * 0.1, cx, cy, Math.max(rx, ry));
+    g.addColorStop(0, rgb(p.color, 1.4));
+    g.addColorStop(0.55, rgb(p.color, 1.0));
+    g.addColorStop(1, rgb(p.color, 0.55));
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
+    ctx.fill();
+    if (p.gloss > 0.6) {
+      ctx.fillStyle = 'rgba(255,255,255,0.55)';
+      ctx.beginPath();
+      ctx.ellipse(cx - rx * 0.35, cy - ry * 0.4, rx * 0.25, ry * 0.15, -0.6, 0, Math.PI * 2);
+      ctx.fill();
+    }
   }
   const url = canvas.toDataURL();
   cache.set(key, url);

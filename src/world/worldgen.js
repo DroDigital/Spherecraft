@@ -80,6 +80,7 @@ export class WorldGen {
     const z0 = cz * CHUNK;
     const seed = this.seed;
 
+    this.springs = []; // world coords of generated waterfalls, handed to the fluid simulation
     this._sampleColumns(x0, z0);
     this._fillTerrain(blocks, x0, z0);
     this._carveCaves(blocks, x0, z0);
@@ -293,9 +294,9 @@ export class WorldGen {
         blocks[blockIndex(x, h, z)] = B.WATER;
         for (let y = h; y > low.h; y--) {
           const i = blockIndex(fx, y, fz);
-          if (blocks[i] === B.AIR) blocks[i] = B.WATER;
+          if (blocks[i] === B.AIR) blocks[i] = B.WATER_FALL;
         }
-        if (low.h >= SEA_LEVEL) blocks[blockIndex(fx, low.h, fz)] = B.WATER;
+        this.springs.push(x0 + x, h, z0 + z, x0 + fx, low.h + 1, z0 + fz);
       }
     }
   }
@@ -403,6 +404,7 @@ export class WorldGen {
           continue;
         }
         if (r < chance) blocks[blockIndex(x, h + 1, z)] = B.TALL_GRASS;
+        else if (r > 0.9975) blocks[blockIndex(x, h + 1, z)] = B.PUMPKIN;
         else if (r < chance + 0.018) {
           blocks[blockIndex(x, h + 1, z)] = hash2(x0 + x, z0 + z, seed ^ 0x3243f6a8) < 0.5 ? B.FLOWER_RED : B.FLOWER_YELLOW;
         }

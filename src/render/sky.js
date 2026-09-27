@@ -1,7 +1,8 @@
-// Sky dome, square sun and moon, stars, blocky clouds and the day/night lighting model.
+// Sky dome, square sun and moon, stars, sphere clouds and the day/night lighting model.
 
 import * as THREE from 'three';
-import { SKY_GLSL, TONEMAP_GLSL } from './shaders.js';
+import { SKY_GLSL, TONEMAP_GLSL, cloudVertex, cloudFragment } from './shaders.js';
+import { circumscribedIcosphere } from './geometry.js';
 import { mulberry32 } from '../world/noise.js';
 
 const col = (hex) => new THREE.Color(hex);
@@ -101,41 +102,12 @@ void main() {
 }
 `;
 
-const cloudVertex = /* glsl */ `
-attribute float aShade;
-varying float vShade;
-varying vec3 vView;
-void main() {
-  vShade = aShade;
-  vec4 world = modelMatrix * vec4(position, 1.0);
-  vView = world.xyz - cameraPosition;
-  gl_Position = projectionMatrix * viewMatrix * world;
-}
-`;
-
-const cloudFragment = /* glsl */ `
-uniform vec3 uColor;
-uniform float uFade;
-uniform float uAlpha;
-varying float vShade;
-varying vec3 vView;
-${TONEMAP_GLSL}
-void main() {
-  float d = length(vView.xz);
-  float a = (1.0 - smoothstep(uFade * 0.55, uFade, d)) * uAlpha;
-  if (a <= 0.0) discard;
-  vec4 c = finalColor(uColor * vShade);
-  gl_FragColor = vec4(c.rgb, a);
-}
-`;
-
 const CLOUD_CELLS = 64;
 const CLOUD_SIZE = 12;
 const CLOUD_Y = 118;
-const CLOUD_T = 4;
 
+/** Puffy clouds: clusters of overlapping spheres placed from periodic noise. */
 function buildCloudGeometry() {
-  // Periodic value noise so the tile repeats seamlessly.
   const rand = mulberry32(1337);
   const G = 16;
   const grid = new Float32Array(G * G).map(() => rand());
@@ -151,37 +123,32 @@ function buildCloudGeometry() {
     const sz = tz * tz * (3 - 2 * tz);
     return (g(0, 0) * (1 - sx) + g(1, 0) * sx) * (1 - sz) + (g(0, 1) * (1 - sx) + g(1, 1) * sx) * sz;
   };
-  const occ = new Uint8Array(CLOUD_CELLS * CLOUD_CELLS);
-  for (let z = 0; z < CLOUD_CELLS; z++) {
-    for (let x = 0; x < CLOUD_CELLS; x++) {
-      const v = sample(x, z, 8) * 0.65 + sample(x + 17, z + 5, 16) * 0.35;
-      occ[z * CLOUD_CELLS + x] = v > 0.6 ? 1 : 0;
-    }
-  }
-  const at = (x, z) => occ[(((z % CLOUD_CELLS) + CLOUD_CELLS) % CLOUD_CELLS) * CLOUD_CELLS + (((x % CLOUD_CELLS) + CLOUD_CELLS) % CLOUD_CELLS)];
-  const pos = [];
-  const shade = [];
-  const quad = (a, b, c, d, s) => {
-    pos.push(...a, ...b, ...c, ...a, ...c, ...d);
-    for (let i = 0; i < 6; i++) shade.push(s);
-  };
+  const spheres = [];
   const S = CLOUD_SIZE;
   for (let z = 0; z < CLOUD_CELLS; z++) {
     for (let x = 0; x < CLOUD_CELLS; x++) {
-      if (!at(x, z)) continue;
-      const x0 = x * S, x1 = x0 + S, z0 = z * S, z1 = z0 + S, y0 = 0, y1 = CLOUD_T;
-      quad([x0, y1, z0], [x0, y1, z1], [x1, y1, z1], [x1, y1, z0], 1.0);
-      quad([x0, y0, z0], [x1, y0, z0], [x1, y0, z1], [x0, y0, z1], 0.72);
-      if (!at(x + 1, z)) quad([x1, y0, z0], [x1, y1, z0], [x1, y1, z1], [x1, y0, z1], 0.86);
-      if (!at(x - 1, z)) quad([x0, y0, z0], [x0, y0, z1], [x0, y1, z1], [x0, y1, z0], 0.86);
-      if (!at(x, z + 1)) quad([x0, y0, z1], [x1, y0, z1], [x1, y1, z1], [x0, y1, z1], 0.8);
-      if (!at(x, z - 1)) quad([x0, y0, z0], [x0, y1, z0], [x1, y1, z0], [x1, y0, z0], 0.8);
+      const v = sample(x, z, 8) * 0.65 + sample(x + 17, z + 5, 16) * 0.35;
+      if (v < 0.58) continue;
+      const thick = (v - 0.58) * 18; // taller in the middle of a cloud
+      const n = 2 + Math.floor(rand() * 2);
+      for (let i = 0; i < n; i++) {
+        const r = 4 + rand() * 3 + thick * 1.5;
+        spheres.push(
+          x * S + rand() * S,
+          rand() * 2 + r * 0.35 + (i === 0 ? thick : 0),
+          z * S + rand() * S,
+          Math.min(r, 11),
+        );
+      }
     }
   }
-  const g = new THREE.BufferGeometry();
-  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
-  g.setAttribute('aShade', new THREE.Float32BufferAttribute(shade, 1));
-  g.computeBoundingSphere();
+  const lod = circumscribedIcosphere(1);
+  const g = new THREE.InstancedBufferGeometry();
+  g.setIndex(lod.index);
+  g.setAttribute('position', lod.position);
+  g.setAttribute('iSphere', new THREE.InstancedBufferAttribute(new Float32Array(spheres), 4));
+  g.instanceCount = spheres.length / 4;
+  g.boundingSphere = new THREE.Sphere(new THREE.Vector3(CLOUD_CELLS * S / 2, 0, CLOUD_CELLS * S / 2), CLOUD_CELLS * S);
   return g;
 }
 
@@ -266,11 +233,16 @@ export class Sky {
     // Clouds: 2x2 copies of a periodic tile that follow the camera.
     const cg = buildCloudGeometry();
     this.cloudMat = new THREE.ShaderMaterial({
-      uniforms: { uColor: { value: new THREE.Color(1, 1, 1) }, uFade: { value: 380 }, uAlpha: { value: 0.88 } },
+      uniforms: {
+        uCloudColor: { value: new THREE.Color(1, 1, 1) },
+        uCloudShade: { value: new THREE.Color(0.7, 0.75, 0.85) },
+        uSunDir: worldUniforms.uGlowDir,
+        uTime: worldUniforms.uTime,
+        uFade: { value: 380 },
+        uAlpha: { value: 1 },
+      },
       vertexShader: cloudVertex,
       fragmentShader: cloudFragment,
-      transparent: true,
-      depthWrite: false,
     });
     this.clouds = [];
     for (let i = 0; i < 4; i++) {
@@ -351,9 +323,10 @@ export class Sky {
     for (let i = 0; i < 4; i++) {
       this.clouds[i].position.set(bx + (i & 1) * tile, CLOUD_Y, bz + (i >> 1) * tile);
     }
-    this.cloudMat.uniforms.uColor.value.setRGB(1, 1, 1).lerp(tmpA.setRGB(1.0, 0.72, 0.55), dusk * 0.35)
-      .lerp(tmpA.setRGB(0.1, 0.12, 0.2), 1 - day);
-    this.cloudMat.uniforms.uAlpha.value = 0.3 + 0.58 * day;
+    const cu = this.cloudMat.uniforms;
+    cu.uCloudColor.value.setRGB(1, 1, 1).lerp(tmpA.setRGB(1.0, 0.78, 0.62), dusk * 0.4).lerp(tmpA.setRGB(0.12, 0.14, 0.22), 1 - day);
+    cu.uCloudShade.value.setRGB(0.68, 0.74, 0.86).lerp(tmpA.setRGB(0.75, 0.5, 0.5), dusk * 0.4).lerp(tmpA.setRGB(0.05, 0.06, 0.1), 1 - day);
+    cu.uAlpha.value = 0.55 + 0.45 * day;
   }
 
   setCloudFade(dist) {

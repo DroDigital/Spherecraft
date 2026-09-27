@@ -6,13 +6,17 @@ import { CHUNK, WATER_DROP } from '../config.js';
 import { circumscribedIcosphere } from './geometry.js';
 import { sphereVertex, sphereFragment, depthFragment, sealVertex, sealFragment, sealDepthVertex, sealDepthFragment } from './shaders.js';
 
-/** 64x3 float texture: [colorA, pattern], [colorB, gloss], [emissive, radius, -, -]. */
+/**
+ * 128x4 float texture per block type:
+ * [colorA, pattern], [colorB, gloss], [emissive, radius, alpha, bump], [fluid level, -, -, -].
+ */
 function createPaletteTexture() {
   const W = MAX_BLOCK_ID;
-  const data = new Float32Array(W * 3 * 4);
+  const H = 4;
+  const data = new Float32Array(W * H * 4);
   const c = new THREE.Color();
   for (const def of BLOCKS) {
-    if (!def) continue;
+    if (!def || def.id >= W) continue;
     const i = def.id * 4;
     c.setHex(def.color);
     data[i] = c.r;
@@ -28,8 +32,11 @@ function createPaletteTexture() {
     const k = (2 * W + def.id) * 4;
     data[k] = def.emissive;
     data[k + 1] = def.radius;
+    data[k + 2] = def.alpha;
+    data[k + 3] = def.bump;
+    data[(3 * W + def.id) * 4] = def.fluid;
   }
-  const tex = new THREE.DataTexture(data, W, 3, THREE.RGBAFormat, THREE.FloatType);
+  const tex = new THREE.DataTexture(data, W, H, THREE.RGBAFormat, THREE.FloatType);
   tex.minFilter = THREE.NearestFilter;
   tex.magFilter = THREE.NearestFilter;
   tex.needsUpdate = true;
@@ -77,6 +84,7 @@ export function createWorldUniforms() {
     uBreak: { value: 0 },
     uLightRay: { value: new THREE.Vector3(0, -1, 0) },
     uDepthScale: { value: 1 / 300 },
+    uRipples: { value: Array.from({ length: 6 }, () => new THREE.Vector4(0, 0, -100, 0)) },
   };
 }
 
@@ -131,20 +139,24 @@ export class ChunkRenderer {
     this.solidMat = new THREE.ShaderMaterial({
       name: 'spheres',
       uniforms: u,
+      defines: { WATER_DROP: WATER_DROP.toFixed(3) },
       vertexShader: sphereVertex,
       fragmentShader: sphereFragment,
     });
-    this.waterMat = new THREE.ShaderMaterial({
-      name: 'water-spheres',
+    // Water, glass and ice: blended, no depth writes, sorted per chunk by three.js.
+    this.clearMat = new THREE.ShaderMaterial({
+      name: 'clear-spheres',
       uniforms: u,
-      defines: { WATER: '', WATER_DROP: WATER_DROP.toFixed(3) },
+      defines: { TRANSLUCENT: '', WATER_DROP: WATER_DROP.toFixed(3) },
       vertexShader: sphereVertex,
       fragmentShader: sphereFragment,
+      transparent: true,
+      depthWrite: false,
     });
     this.depthMat = new THREE.ShaderMaterial({
       name: 'sphere-depth',
       uniforms: u,
-      defines: { DEPTH: '' },
+      defines: { DEPTH: '', WATER_DROP: WATER_DROP.toFixed(3) },
       vertexShader: sphereVertex,
       fragmentShader: depthFragment,
     });
@@ -167,6 +179,8 @@ export class ChunkRenderer {
       uniforms: u,
       defines: { WATER: '', SEAL_PUSH: '0.03' },
       side: THREE.DoubleSide,
+      transparent: true,
+      depthWrite: false,
       vertexShader: sealVertex,
       fragmentShader: sealFragment,
     });
@@ -214,7 +228,7 @@ export class ChunkRenderer {
     }
     if (data.water.count) {
       const attrs = instanceAttributes(data.water);
-      add(new THREE.Mesh(instancedGeometry(lod, attrs, data.water.count, bounds), this.waterMat), entry.inst);
+      add(new THREE.Mesh(instancedGeometry(lod, attrs, data.water.count, bounds), this.clearMat), entry.inst).renderOrder = 2;
       entry.count += data.water.count;
     }
     // Sealers are cheap and approximate the terrain surface, so they are drawn first
@@ -228,7 +242,7 @@ export class ChunkRenderer {
       const m = add(new THREE.Mesh(quadGeometry(data.deepSeal, bounds), this.sealMat), entry.deep);
       m.renderOrder = -1;
     }
-    if (data.waterSeal.count) add(new THREE.Mesh(quadGeometry(data.waterSeal, bounds), this.waterSealMat)).renderOrder = -1;
+    if (data.waterSeal.count) add(new THREE.Mesh(quadGeometry(data.waterSeal, bounds), this.waterSealMat)).renderOrder = 1;
 
     const deepVisible = this.isDeepVisible(cx, cz);
     for (const m of entry.deep) m.visible = deepVisible;

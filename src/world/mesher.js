@@ -8,7 +8,7 @@
 // is only visible through the gaps, where it is shaded as a dark crevice.
 
 import { CHUNK, HEIGHT, WATER_DROP } from '../config.js';
-import { B, BLOCKS, OPAQUE, HAS_PARTS, LIGHT } from '../blocks.js';
+import { B, BLOCKS, OPAQUE, HAS_PARTS, LIGHT, FLUID, TRANSLUCENT } from '../blocks.js';
 
 const P = CHUNK + 2; // padded width (-1 .. 16)
 const PA = P * P; // padded layer size
@@ -278,7 +278,7 @@ function solidExtent(p, t, dOff) {
 }
 
 function isAirLike(id) {
-  return id !== B.WATER && !OPAQUE[id];
+  return !FLUID[id] && !OPAQUE[id];
 }
 
 function waterExtent(p, t, dOff) {
@@ -353,17 +353,36 @@ export function meshChunk(world, chunk) {
         const b = pad[p];
         if (b === B.AIR) continue;
 
-        if (b === B.WATER) {
+        if (FLUID[b]) {
           let mask = 0;
           for (let d = 0; d < 6; d++) if (isAirLike(pad[p + OFF[d]])) mask |= 1 << d;
           if (!mask) continue;
           const light = packLight(skyAt(x, y + 1, z), torchAt(x + 0.5, y + 1.5, z + 0.5));
           // Water with water above and open sides is falling: the shader animates it.
-          const falling = pad[p + PA] === B.WATER && (mask & 0b110011) !== 0 ? 1 : 0;
-          waterBuf.push(x, y, z, B.WATER, NO_AO, light, falling);
-          for (let d = 0; d < 6; d++) {
-            if (mask & (1 << d)) emitSeal(waterSealBuf, p, x, y, z, d, B.WATER, light, waterExtent, -WATER_DROP);
+          const falling = b === B.WATER_FALL || (FLUID[pad[p + PA]] && (mask & 0b110011) !== 0) ? 1 : 0;
+          waterBuf.push(x, y, z, b, NO_AO, light, falling);
+          if (b === B.WATER && !falling) {
+            for (let d = 0; d < 6; d++) {
+              if (mask & (1 << d)) emitSeal(waterSealBuf, p, x, y, z, d, B.WATER, light, waterExtent, -WATER_DROP);
+            }
           }
+          if (y < minY) minY = y;
+          if (y > maxY) maxY = y;
+          continue;
+        }
+
+        if (TRANSLUCENT[b]) {
+          // Glass and ice: see-through spheres drawn with the water.
+          let visible = false;
+          let sky = 0;
+          for (let d = 0; d < 6; d++) {
+            const n = pad[p + OFF[d]];
+            if (OPAQUE[n] || n === b) continue;
+            visible = true;
+            sky = Math.max(sky, skyAt(x + DX[d], y + DY[d], z + DZ[d]));
+          }
+          if (!visible) continue;
+          waterBuf.push(x, y, z, b, NO_AO, packLight(Math.max(sky, 0.3), torchAt(x + 0.5, y + 0.5, z + 0.5)), 0);
           if (y < minY) minY = y;
           if (y > maxY) maxY = y;
           continue;
@@ -407,6 +426,17 @@ export function meshChunk(world, chunk) {
           if (!visible) continue;
         }
         torch = LIGHT[b] ? 1 : torchAt(x + 0.5, y + 0.5, z + 0.5);
+        // Blocks under water get darker with depth.
+        if (FLUID[pad[p + PA]] || FLUID[pad[p + OFF[0]]] || FLUID[pad[p + OFF[1]]] || FLUID[pad[p + OFF[4]]] || FLUID[pad[p + OFF[5]]]) {
+          let depth = 0;
+          let q = p + PA;
+          while (depth < 12 && FLUID[pad[q]]) {
+            depth++;
+            q += PA;
+          }
+          if (depth === 0) depth = 1;
+          sky *= Math.max(0.25, 1 - depth * 0.09);
+        }
         const light = packLight(sky, torch);
         for (let d = 0; d < 6; d++) ao[d] = occlusion(p, d);
         const deep = light === 0;

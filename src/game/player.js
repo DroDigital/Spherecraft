@@ -3,7 +3,7 @@
 
 import * as THREE from 'three';
 import { PLAYER, HEIGHT } from '../config.js';
-import { B, SOLID } from '../blocks.js';
+import { SOLID, FLUID } from '../blocks.js';
 
 const HW = PLAYER.halfWidth;
 const PH = PLAYER.height;
@@ -28,7 +28,10 @@ export class Player {
     this.regenTimer = 0;
     this.walkTime = 0;
     this.autoJump = false;
+    this.invulnerable = false; // creative mode
+    this.naturalRegen = true; // survival mode regenerates through hunger instead
     this.onDamage = null; // (amount) => void
+    this.onLand = null; // (fallDistance) => void
   }
 
   get eyeHeight() {
@@ -104,7 +107,7 @@ export class Player {
   }
 
   damage(amount, now) {
-    if (amount <= 0 || this.health <= 0) return;
+    if (amount <= 0 || this.health <= 0 || this.invulnerable) return;
     this.health = Math.max(0, this.health - amount);
     this.lastDamage = now;
     this.regenTimer = 0;
@@ -122,10 +125,12 @@ export class Player {
     const p = this.pos;
     const feet = w.getBlock(Math.floor(p.x), Math.floor(p.y + 0.1), Math.floor(p.z));
     const waist = w.getBlock(Math.floor(p.x), Math.floor(p.y + 0.8), Math.floor(p.z));
-    this.inWater = feet === B.WATER || waist === B.WATER;
-    this.headInWater = w.getBlock(Math.floor(p.x), Math.floor(p.y + this.eyeHeight), Math.floor(p.z)) === B.WATER;
+    const wasInWater = this.inWater;
+    this.inWater = FLUID[feet] > 0 || FLUID[waist] > 0;
+    this.headInWater = FLUID[w.getBlock(Math.floor(p.x), Math.floor(p.y + this.eyeHeight), Math.floor(p.z))] > 0;
+    this.enteredWater = this.inWater && !wasInWater;
     this.sneaking = !!input.sneak;
-    this.sprinting = !!input.sprint && input.forward > 0 && !this.sneaking;
+    this.sprinting = !!input.sprint && input.forward > 0 && !this.sneaking && !this.tooHungryToSprint;
 
     const sy = Math.sin(this.yaw);
     const cy = Math.cos(this.yaw);
@@ -207,6 +212,7 @@ export class Player {
       if (this.fallPeak !== null) {
         const dist = this.fallPeak - p.y;
         if (dist > 3.5) this.damage(Math.floor(dist - 3), now);
+        if (this.onLand) this.onLand(dist);
       }
       this.fallPeak = null;
     } else {
@@ -215,7 +221,7 @@ export class Player {
     if (p.y < -30) this.damage(this.health, now);
 
     // Regeneration.
-    if (this.health > 0 && this.health < PLAYER.maxHealth && now - this.lastDamage > 4) {
+    if (this.naturalRegen && this.health > 0 && this.health < PLAYER.maxHealth && now - this.lastDamage > 4) {
       this.regenTimer += dt;
       if (this.regenTimer > 2) {
         this.regenTimer = 0;

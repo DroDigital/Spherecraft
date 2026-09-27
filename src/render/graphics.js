@@ -7,6 +7,7 @@ import { circumscribedIcosphere } from './geometry.js';
 import { Sky } from './sky.js';
 import { Hand } from './hand.js';
 import { Particles } from './particles.js';
+import { EntitySpheres } from './entities.js';
 import { highlightVertex, highlightFragment } from './shaders.js';
 
 const _q = new THREE.Quaternion();
@@ -31,7 +32,9 @@ export class Graphics {
     this.chunks = new ChunkRenderer(this.scene, this.uniforms);
     this.sky = new Sky(this.scene, this.uniforms);
     this.particles = new Particles(this.scene);
-    this.hand = new Hand();
+    this.hand = new Hand(this.uniforms);
+    this.entities = new EntitySpheres(this.scene, this.uniforms, { max: 6000, shadows: true, detail: 1 });
+    this.rippleIndex = 0;
 
     // Lights for the few built-in materials in the world scene (particles).
     this.ambient = new THREE.AmbientLight(0xffffff, 0.5);
@@ -199,6 +202,13 @@ export class Graphics {
     this.uniforms.uLightRay.value.copy(dir).negate();
   }
 
+  /** Starts an expanding ring on water surfaces. */
+  addRipple(x, z, strength = 1) {
+    const r = this.uniforms.uRipples.value[this.rippleIndex];
+    this.rippleIndex = (this.rippleIndex + 1) % this.uniforms.uRipples.value.length;
+    r.set(x, z, this.uniforms.uTime.value, strength);
+  }
+
   render(dt, { dayTime, time, focus, handState, showHand }) {
     const u = this.uniforms;
     u.uTime.value = time;
@@ -222,7 +232,7 @@ export class Graphics {
     r.clear();
     r.render(this.scene, this.camera);
     if (showHand) {
-      this.hand.update(dt, { ...handState, sunColor: u.uSunColor.value });
+      this.hand.update(dt, { ...handState, worldCamera: this.camera });
       r.clearDepth();
       r.render(this.hand.scene, this.hand.camera);
     }

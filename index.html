@@ -15,6 +15,7 @@
     <canvas id="game" aria-label="Spherecraft game view"></canvas>
     <div id="underwater"></div>
     <div id="damage-flash"></div>
+    <div id="sleep-fade"></div>
 
     <div id="hud" class="hidden">
       <div id="crosshair"></div>
@@ -22,7 +23,11 @@
       <div id="badge"></div>
       <div id="toast"></div>
       <div id="bottom">
-        <div id="hearts"></div>
+        <div id="air"></div>
+        <div id="bars">
+          <div id="hearts"></div>
+          <div id="food"></div>
+        </div>
         <div id="hotbar"></div>
       </div>
       <div id="touch-buttons">
@@ -48,6 +53,7 @@
       <p class="tagline">Minecraft, but every block is a sphere.</p>
       <div class="menu">
         <button class="btn primary" id="btn-play">Play</button>
+        <button class="btn" id="btn-newmode">New worlds: Survival</button>
         <label class="seed">
           <span>World seed</span>
           <input id="seed-input" type="text" maxlength="32" spellcheck="false" autocomplete="off" />
@@ -64,6 +70,7 @@
       <h2>Game paused</h2>
       <div class="menu">
         <button class="btn primary" id="btn-resume">Back to game</button>
+        <button class="btn" id="btn-gamemode">Game mode: Survival</button>
         <div class="row">
           <button class="btn" id="btn-settings">Settings</button>
           <button class="btn" id="btn-help">Controls</button>
@@ -88,11 +95,15 @@
         <label>Resolution <output id="out-res"></output>
           <input type="range" id="set-res" min="0.5" max="2" step="0.25" />
         </label>
+        <label>Sound volume <output id="out-volume"></output>
+          <input type="range" id="set-volume" min="0" max="1" step="0.05" />
+        </label>
         <div class="toggles">
           <label><input type="checkbox" id="set-shadows" /> Sun shadows</label>
           <label><input type="checkbox" id="set-daycycle" /> Day / night cycle</label>
           <label><input type="checkbox" id="set-autojump" /> Auto-jump</label>
           <label><input type="checkbox" id="set-fps" /> Show debug info</label>
+          <label><input type="checkbox" id="set-peaceful" /> Peaceful (no monsters)</label>
         </div>
         <button class="btn primary" id="btn-settings-done">Done</button>
       </div>
@@ -104,12 +115,13 @@
         <div><kbd>W A S D</kbd> Move</div>
         <div><kbd>Mouse</kbd> Look around</div>
         <div><kbd>Space</kbd> Jump / swim up</div>
-        <div><kbd>Space</kbd>&times;2 Toggle flying</div>
+        <div><kbd>Space</kbd>&times;2 Fly (creative)</div>
         <div><kbd>Shift</kbd> Sneak / fly down</div>
         <div><kbd>Ctrl</kbd> or <kbd>W</kbd>&times;2 Sprint</div>
-        <div><kbd>Left click</kbd> (hold) Break sphere</div>
-        <div><kbd>Right click</kbd> Place sphere</div>
-        <div><kbd>Middle click</kbd> Pick block</div>
+        <div><kbd>Left click</kbd> (hold) Mine / attack</div>
+        <div><kbd>Right click</kbd> Place, use, eat, open</div>
+        <div><kbd>Middle click</kbd> Pick block (creative)</div>
+        <div><kbd>Q</kbd> Drop item</div>
         <div><kbd>1–9</kbd> / <kbd>Wheel</kbd> Select block</div>
         <div><kbd>E</kbd> Inventory</div>
         <div><kbd>F3</kbd> Debug info &nbsp; <kbd>Esc</kbd> Pause</div>
@@ -119,11 +131,24 @@
     </section>
 
     <section id="inventory" class="screen hidden">
-      <h2>Blocks</h2>
-      <p class="hint">Pick a sphere for the selected hotbar slot. Press <kbd>E</kbd> to close.</p>
-      <div id="inv-grid"></div>
+      <div class="inv-wrap">
+        <div class="inv-panel">
+          <h2 id="inv-title">Inventory</h2>
+          <div id="chest-grid" class="slot-grid hidden"></div>
+          <div id="creative-grid" class="slot-grid creative hidden"></div>
+          <div id="main-grid" class="slot-grid"></div>
+          <div id="hot-grid" class="slot-grid"></div>
+          <p class="hint">Click to pick up or drop a stack, right-click to split. Press <kbd>E</kbd> to close.</p>
+        </div>
+        <div class="inv-panel" id="craft-panel">
+          <h2>Crafting</h2>
+          <p class="hint" id="craft-station"></p>
+          <div id="recipe-list"></div>
+        </div>
+      </div>
       <div class="menu"><button class="btn primary" id="btn-inv-done">Done</button></div>
     </section>
+    <div id="cursor-stack" class="slot"></div>
 
     <section id="dead" class="screen hidden">
       <h2 class="dead-title">You died!</h2>
