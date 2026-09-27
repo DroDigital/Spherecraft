@@ -16,7 +16,7 @@ const DEFAULT_SETTINGS = {
   renderDistance: IS_TOUCH ? 5 : 8,
   fov: 75,
   sensitivity: 1,
-  resolution: IS_TOUCH ? 1.5 : 2,
+  resolution: 1.5,
   shadows: !IS_TOUCH,
   dayCycle: true,
   autoJump: IS_TOUCH,
