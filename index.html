@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+    <meta name="theme-color" content="#3576de" />
+    <meta name="description" content="Spherecraft: a Minecraft-style voxel sandbox where every block is a sphere." />
+    <title>Spherecraft</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cdefs%3E%3CradialGradient id='g' cx='35%25' cy='30%25' r='75%25'%3E%3Cstop offset='0' stop-color='%23b8f58a'/%3E%3Cstop offset='.55' stop-color='%2362c436'/%3E%3Cstop offset='1' stop-color='%23255e14'/%3E%3C/radialGradient%3E%3C/defs%3E%3Ccircle cx='32' cy='32' r='29' fill='url(%23g)'/%3E%3C/svg%3E" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&display=swap" rel="stylesheet" />
+  </head>
+  <body>
+    <canvas id="game" aria-label="Spherecraft game view"></canvas>
+    <div id="underwater"></div>
+    <div id="damage-flash"></div>
+
+    <div id="hud" class="hidden">
+      <div id="crosshair"></div>
+      <pre id="debug" class="hidden"></pre>
+      <div id="badge"></div>
+      <div id="toast"></div>
+      <div id="bottom">
+        <div id="hearts"></div>
+        <div id="hotbar"></div>
+      </div>
+      <div id="touch-buttons">
+        <button id="touch-inv" aria-label="Inventory">&#9638;</button>
+        <button id="touch-pause" aria-label="Pause">&#10074;&#10074;</button>
+      </div>
+    </div>
+
+    <div id="touch">
+      <div class="stick"><div class="knob"></div></div>
+      <button data-touch="jump" aria-label="Jump">&#9650;</button>
+      <button data-touch="down" aria-label="Sneak / fly down">&#9660;</button>
+    </div>
+
+    <section id="loading" class="screen">
+      <canvas class="logo"></canvas>
+      <div class="progress"><div id="load-bar"></div></div>
+      <p id="load-label">Rolling the world into spheres…</p>
+    </section>
+
+    <section id="title" class="screen hidden">
+      <canvas class="logo"></canvas>
+      <p class="tagline">Minecraft, but every block is a sphere.</p>
+      <div class="menu">
+        <button class="btn primary" id="btn-play">Play</button>
+        <label class="seed">
+          <span>World seed</span>
+          <input id="seed-input" type="text" maxlength="32" spellcheck="false" autocomplete="off" />
+        </label>
+        <div class="row">
+          <button class="btn" id="btn-random">Random world</button>
+          <button class="btn" id="btn-title-settings">Settings</button>
+        </div>
+        <button class="btn" id="btn-title-help">Controls</button>
+      </div>
+    </section>
+
+    <section id="pause" class="screen hidden">
+      <h2>Game paused</h2>
+      <div class="menu">
+        <button class="btn primary" id="btn-resume">Back to game</button>
+        <div class="row">
+          <button class="btn" id="btn-settings">Settings</button>
+          <button class="btn" id="btn-help">Controls</button>
+        </div>
+        <button class="btn" id="btn-title">Save &amp; quit to title</button>
+      </div>
+      <p class="hint" id="pause-hint"></p>
+    </section>
+
+    <section id="settings" class="screen hidden">
+      <h2>Settings</h2>
+      <div class="menu settings">
+        <label>Render distance <output id="out-distance"></output>
+          <input type="range" id="set-distance" min="3" max="16" step="1" />
+        </label>
+        <label>Field of view <output id="out-fov"></output>
+          <input type="range" id="set-fov" min="55" max="110" step="1" />
+        </label>
+        <label>Look sensitivity <output id="out-sens"></output>
+          <input type="range" id="set-sens" min="0.2" max="3" step="0.1" />
+        </label>
+        <label>Resolution <output id="out-res"></output>
+          <input type="range" id="set-res" min="0.5" max="2" step="0.25" />
+        </label>
+        <div class="toggles">
+          <label><input type="checkbox" id="set-shadows" /> Sun shadows</label>
+          <label><input type="checkbox" id="set-daycycle" /> Day / night cycle</label>
+          <label><input type="checkbox" id="set-autojump" /> Auto-jump</label>
+          <label><input type="checkbox" id="set-fps" /> Show debug info</label>
+        </div>
+        <button class="btn primary" id="btn-settings-done">Done</button>
+      </div>
+    </section>
+
+    <section id="help" class="screen hidden">
+      <h2>Controls</h2>
+      <div class="help-grid">
+        <div><kbd>W A S D</kbd> Move</div>
+        <div><kbd>Mouse</kbd> Look around</div>
+        <div><kbd>Space</kbd> Jump / swim up</div>
+        <div><kbd>Space</kbd>&times;2 Toggle flying</div>
+        <div><kbd>Shift</kbd> Sneak / fly down</div>
+        <div><kbd>Ctrl</kbd> or <kbd>W</kbd>&times;2 Sprint</div>
+        <div><kbd>Left click</kbd> (hold) Break sphere</div>
+        <div><kbd>Right click</kbd> Place sphere</div>
+        <div><kbd>Middle click</kbd> Pick block</div>
+        <div><kbd>1–9</kbd> / <kbd>Wheel</kbd> Select block</div>
+        <div><kbd>E</kbd> Inventory</div>
+        <div><kbd>F3</kbd> Debug info &nbsp; <kbd>Esc</kbd> Pause</div>
+      </div>
+      <p class="hint touch-hint">Touch: left thumb moves, drag right side to look, tap to place, hold to break, double-tap &#9650; to fly.</p>
+      <div class="menu"><button class="btn primary" id="btn-help-done">Done</button></div>
+    </section>
+
+    <section id="inventory" class="screen hidden">
+      <h2>Blocks</h2>
+      <p class="hint">Pick a sphere for the selected hotbar slot. Press <kbd>E</kbd> to close.</p>
+      <div id="inv-grid"></div>
+      <div class="menu"><button class="btn primary" id="btn-inv-done">Done</button></div>
+    </section>
+
+    <section id="dead" class="screen hidden">
+      <h2 class="dead-title">You died!</h2>
+      <div class="menu"><button class="btn primary" id="btn-respawn">Respawn</button></div>
+    </section>
+
+    <section id="error" class="screen hidden">
+      <h2>Spherecraft can't start</h2>
+      <p class="hint" id="error-text"></p>
+    </section>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
