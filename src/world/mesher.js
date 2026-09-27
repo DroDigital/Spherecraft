@@ -311,11 +311,12 @@ function emitSeal(buf, p, x, y, z, d, type, light, extentFn, yOff) {
   const u = AX[(a + 1) % 3];
   const v = AX[(a + 2) % 3];
   const dOff = OFF[d];
-  pushQuad(
-    buf, x, y, z, d,
-    extentFn(p, -u, dOff), extentFn(p, u, dOff), extentFn(p, -v, dOff), extentFn(p, v, dOff),
-    type, light, yOff,
-  );
+  const eum = extentFn(p, -u, dOff);
+  const eup = extentFn(p, u, dOff);
+  const evm = extentFn(p, -v, dOff);
+  const evp = extentFn(p, v, dOff);
+  if (eum + eup === 0 || evm + evp === 0) return; // degenerate (e.g. a lone block)
+  pushQuad(buf, x, y, z, d, eum, eup, evm, evp, type, light, yOff);
 }
 
 /**
@@ -357,7 +358,9 @@ export function meshChunk(world, chunk) {
           for (let d = 0; d < 6; d++) if (isAirLike(pad[p + OFF[d]])) mask |= 1 << d;
           if (!mask) continue;
           const light = packLight(skyAt(x, y + 1, z), torchAt(x + 0.5, y + 1.5, z + 0.5));
-          waterBuf.push(x, y, z, B.WATER, NO_AO, light, 0);
+          // Water with water above and open sides is falling: the shader animates it.
+          const falling = pad[p + PA] === B.WATER && (mask & 0b110011) !== 0 ? 1 : 0;
+          waterBuf.push(x, y, z, B.WATER, NO_AO, light, falling);
           for (let d = 0; d < 6; d++) {
             if (mask & (1 << d)) emitSeal(waterSealBuf, p, x, y, z, d, B.WATER, light, waterExtent, -WATER_DROP);
           }

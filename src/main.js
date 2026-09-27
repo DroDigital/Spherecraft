@@ -60,6 +60,7 @@ class Game {
     this.titleAngle = 0;
     this.fovBoost = 0;
     this.returnScreen = 'title';
+    this.perf = { time: 0, frames: 0, scale: 1 };
 
     this._bindUI();
     this._bindInput();
@@ -157,7 +158,11 @@ class Game {
   }
 
   respawnPoint() {
-    return { x: this.spawn.x + 0.5, y: this.spawn.y + 1, z: this.spawn.z + 0.5 };
+    const { x, z } = this.spawn;
+    // Climb out of anything the player may have built over the spawn point.
+    let y = this.spawn.y + 1;
+    while (y < HEIGHT - 2 && (SOLID[this.world.getBlock(x, y, z)] || SOLID[this.world.getBlock(x, y + 1, z)])) y++;
+    return { x: x + 0.5, y, z: z + 0.5 };
   }
 
   saveGame() {
@@ -182,6 +187,10 @@ class Game {
     this.gfx.setRenderDistance(s.renderDistance);
     this.gfx.setShadows(s.shadows, IS_TOUCH ? 1024 : 2048);
     this.gfx.setPixelRatioCap(s.resolution);
+    if (this.perf && this.perf.scale !== 1) {
+      this.perf.scale = 1;
+      this.gfx.setResolutionScale(1);
+    }
     this.input.sensitivity = s.sensitivity;
     if (this.streamer) this.streamer.setRadius(s.renderDistance);
     if (this.player) this.player.autoJump = s.autoJump;
@@ -616,10 +625,32 @@ class Game {
     this.gfx.setFov(this.settings.fov + this.fovBoost);
   }
 
+  /** Drops the render resolution a notch when the frame rate stays low. */
+  autoScale(frameSeconds) {
+    const perf = this.perf;
+    if (this.state !== 'playing' || document.hidden) {
+      perf.time = 0;
+      perf.frames = 0;
+      return;
+    }
+    perf.time += frameSeconds;
+    perf.frames++;
+    if (perf.time < 4) return;
+    const avg = perf.time / perf.frames;
+    perf.time = 0;
+    perf.frames = 0;
+    if (avg > 1 / 24 && perf.scale > 0.6) {
+      perf.scale = Math.max(0.6, perf.scale - 0.15);
+      this.gfx.setResolutionScale(perf.scale);
+    }
+  }
+
   frame(t) {
     requestAnimationFrame((tt) => this.frame(tt));
-    const dt = Math.min(0.05, Math.max(0, (t - this.lastFrame) / 1000));
+    const raw = Math.max(0, (t - this.lastFrame) / 1000);
+    const dt = Math.min(0.05, raw);
     this.lastFrame = t;
+    if (raw < 0.5) this.autoScale(raw);
     this.time += dt;
     this.fps += (1 / Math.max(dt, 0.001) - this.fps) * 0.05;
 
@@ -675,6 +706,7 @@ class Game {
         `Chunk ${Math.floor(p.x / CHUNK)}, ${Math.floor(p.z / CHUNK)}  facing ${facing}\n` +
         `Chunks ${st.chunks}  spheres ${st.instances.toLocaleString()}\n` +
         `Draw calls ${info.calls}  triangles ${info.triangles.toLocaleString()}\n` +
+        `Resolution ${Math.round(this.gfx.renderer.getPixelRatio() * 100)}%\n` +
         `Time ${String(hours).padStart(2, '0')}:00  seed ${this.seedText}`,
     );
   }

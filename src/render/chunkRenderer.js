@@ -217,13 +217,18 @@ export class ChunkRenderer {
       add(new THREE.Mesh(instancedGeometry(lod, attrs, data.water.count, bounds), this.waterMat), entry.inst);
       entry.count += data.water.count;
     }
+    // Sealers are cheap and approximate the terrain surface, so they are drawn first
+    // and act as a depth pre-pass for the (more expensive) sphere fragments.
     if (data.seal.count) {
       const g = quadGeometry(data.seal, bounds);
-      add(new THREE.Mesh(g, this.sealMat));
+      add(new THREE.Mesh(g, this.sealMat)).renderOrder = -1;
       add(new THREE.Mesh(g, this.sealDepthMat)).layers.set(1);
     }
-    if (data.deepSeal.count) entry.deep.push(add(new THREE.Mesh(quadGeometry(data.deepSeal, bounds), this.sealMat)));
-    if (data.waterSeal.count) add(new THREE.Mesh(quadGeometry(data.waterSeal, bounds), this.waterSealMat));
+    if (data.deepSeal.count) {
+      const m = add(new THREE.Mesh(quadGeometry(data.deepSeal, bounds), this.sealMat), entry.deep);
+      m.renderOrder = -1;
+    }
+    if (data.waterSeal.count) add(new THREE.Mesh(quadGeometry(data.waterSeal, bounds), this.waterSealMat)).renderOrder = -1;
 
     const deepVisible = this.isDeepVisible(cx, cz);
     for (const m of entry.deep) m.visible = deepVisible;

@@ -115,10 +115,16 @@ export class Graphics {
     this.resize();
   }
 
+  /** Extra multiplier applied on top of the resolution setting (used by auto-scaling). */
+  setResolutionScale(scale) {
+    this.resolutionScale = scale;
+    this.resize();
+  }
+
   resize() {
     const w = window.innerWidth;
     const h = window.innerHeight;
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, this.pixelRatioCap));
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, this.pixelRatioCap) * (this.resolutionScale ?? 1));
     this.renderer.setSize(w, h, false);
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();

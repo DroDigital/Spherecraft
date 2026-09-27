@@ -84,6 +84,7 @@ export class WorldGen {
     this._fillTerrain(blocks, x0, z0);
     this._carveCaves(blocks, x0, z0);
     this._placeOres(blocks, cx, cz);
+    this._placeWaterfalls(blocks, x0, z0);
     this._placeTrees(blocks, x0, z0);
     this._placePlants(blocks, x0, z0, seed);
     return blocks;
@@ -266,6 +267,35 @@ export class WorldGen {
           y = Math.min(HEIGHT - 1, Math.max(1, y + Math.floor(rand() * 3) - 1));
           z = Math.min(CHUNK - 1, Math.max(0, z + Math.floor(rand() * 3) - 1));
         }
+      }
+    }
+  }
+
+  /** Springs in stone cliffs that pour a column of water down the cliff face. */
+  _placeWaterfalls(blocks, x0, z0) {
+    const seed = this.seed;
+    const dirs = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+    for (let z = 1; z < CHUNK - 1; z++) {
+      for (let x = 1; x < CHUNK - 1; x++) {
+        const c = (z + MARGIN) * HM + (x + MARGIN);
+        const h = this.hm[c];
+        if (this.surface[c] !== B.STONE || h < SEA_LEVEL + 6) continue;
+        if (hash2(x0 + x, z0 + z, seed ^ 0x5f3759df) > 0.02) continue;
+        let low = null;
+        for (const [dx, dz] of dirs) {
+          const hn = this.hm[c + dz * HM + dx];
+          if (!low || hn < low.h) low = { dx, dz, h: hn };
+        }
+        if (h - low.h < 5) continue;
+        const fx = x + low.dx;
+        const fz = z + low.dz;
+        if (blocks[blockIndex(x, h, z)] === B.AIR) continue; // carved by a cave
+        blocks[blockIndex(x, h, z)] = B.WATER;
+        for (let y = h; y > low.h; y--) {
+          const i = blockIndex(fx, y, fz);
+          if (blocks[i] === B.AIR) blocks[i] = B.WATER;
+        }
+        if (low.h >= SEA_LEVEL) blocks[blockIndex(fx, low.h, fz)] = B.WATER;
       }
     }
   }

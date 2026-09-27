@@ -129,6 +129,9 @@ flat varying vec3 vAoN;
 flat varying vec2 vLight; // sky, block light
 flat varying float vBreak;
 #endif
+#ifdef WATER
+flat varying float vFall;
+#endif
 
 ${HASH}
 
@@ -141,6 +144,10 @@ void main() {
 
   vec3 center = aPos.xyz + 0.5;
   vec3 scale = vec3(p2.y);
+#ifdef WATER
+  float falling = float(shape);
+  shape = 0;
+#endif
   if (shape > 0) {
     vec4 so = uShapeOff[shape];
     vec4 ss = uShapeScale[shape];
@@ -155,9 +162,14 @@ void main() {
     scale *= 1.0 + (seed - 0.5) * 0.05;
   }
 #ifdef WATER
-  center.y += -WATER_DROP
-    + sin(uTime * 1.6 + cellW.x * 0.8 + cellW.z * 0.5) * 0.035
-    + sin(uTime * 1.13 - cellW.x * 0.35 + cellW.z * 1.1) * 0.025;
+  if (falling > 0.5) {
+    center.xz += vec2(sin(uTime * 7.0 + cellW.y * 1.7), cos(uTime * 6.0 + cellW.y * 2.3)) * 0.03;
+  } else {
+    center.y += -WATER_DROP
+      + sin(uTime * 1.6 + cellW.x * 0.8 + cellW.z * 0.5) * 0.035
+      + sin(uTime * 1.13 - cellW.x * 0.35 + cellW.z * 1.1) * 0.025;
+  }
+  vFall = falling;
 #endif
 
   float brk = 0.0;
@@ -203,6 +215,9 @@ flat varying vec3 vAoP;
 flat varying vec3 vAoN;
 flat varying vec2 vLight;
 flat varying float vBreak;
+#ifdef WATER
+flat varying float vFall;
+#endif
 
 ${ENV}
 ${HASH}
@@ -272,6 +287,12 @@ void main() {
   float seed = vMat.w;
   vec3 albedo = patternAlbedo(int(vMat.x + 0.5), vColA, vColB, q, seed);
 
+#ifdef WATER
+  if (vFall > 0.5) {
+    float streak = fract(q.y * 1.4 + uTime * 2.4 + seed * 5.0 + floor(atan(q.z, q.x) * 1.5) * 0.37);
+    albedo = mix(albedo, vec3(0.75, 0.88, 1.0), smoothstep(0.55, 1.0, streak) * 0.55);
+  }
+#endif
   if (vBreak > 0.0) {
     float cr = vnoise(q * 4.5 + 3.0);
     float line = 1.0 - smoothstep(0.0, 0.04 + 0.05 * vBreak, abs(cr - 0.5));
